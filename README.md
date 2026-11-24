@@ -34,121 +34,98 @@ pnpm dev
 
 ## 章ごとの要点
 
+公式チュートリアルの各章に書かれている推奨事項・注意点をまとめています。
+
 ### 第 1 章: Getting Started
 
-- `create-next-app` でスターターテンプレートからプロジェクトを作成し、`pnpm dev` で開発サーバーを起動する。
-- フォルダ構成の基本は次のとおり。
-  - `/app`: ルーティングとアプリ本体
-  - `/app/lib`: データ取得やユーティリティなどの関数
-  - `/app/ui`: UI コンポーネント
-  - `/public`: 画像などの静的ファイル
-- プレースホルダーのデータ(`app/lib/placeholder-data.ts`)と型定義(`app/lib/definitions.ts`)を用意する。
+- パッケージマネージャは pnpm を推奨。
+- TypeScript の型で、金額に文字列を渡すといった誤った型のデータを防ぐ。
+- 規模が大きくなったら、Prisma や Drizzle でスキーマから型を自動生成することを推奨。
 
 ### 第 2 章: CSS Styling
 
-- グローバル CSS(`app/ui/global.css`)を、ルートレイアウト(`app/layout.tsx`)で import して全ページに適用する。
-- Tailwind CSS はクラス名を直接書くユーティリティファーストの方式。
-- `clsx` を使うと、条件によってクラス名を切り替えられる(例: アクティブなリンクの色)。
+- グローバル CSS は、最上位のコンポーネント(レイアウト)で import するのが一般的。
+- Tailwind は、スタイルを JSX と一緒に書く。要素を消しても CSS を別に保守する必要がなく、CSS の肥大化やスタイルの衝突も起きにくい。
+- CSS Modules も選択肢。好みで使い分けられる。
 
 ### 第 3 章: Optimizing Fonts and Images
 
-- `next/font` でフォント(`Inter`、`Lusitana`)を読み込む(`app/ui/fonts.ts`)。フォントはビルド時に取得され、レイアウトシフトを防ぐ。
-- `next/image` の `<Image>` コンポーネントで、画像の遅延読み込みとレイアウトシフトの防止ができる。
-- デスクトップ用とモバイル用の画像を、Tailwind の `hidden md:block` などで出し分ける。
+- フォントは、使う subset と weight を指定する。
+- 画像は `next/image` で自動最適化する。
+- `width` と `height` を指定してレイアウトシフトを防ぐ。値は表示サイズではなく、元画像の縦横比に合わせる。
 
 ### 第 4 章: Creating Layouts and Pages
 
-- フォルダ名がそのままルートになる。ページは `page.tsx` で定義する。
-- `layout.tsx` は共通の UI で、ページ遷移しても再レンダリングされない(部分レンダリング)。
-- `app/dashboard/layout.tsx` にサイドナビを置き、`/dashboard` 配下のページで共有する。
-- ルートグループ `(overview)` を使うと、URL に影響を与えずにファイルを整理できる。
-- `app/layout.tsx`(ルートレイアウト)は必須で、`<html>` と `<body>` を含める。
+- 複数ページで共通の UI は `layout.tsx` に置く。
+- ダッシュボード専用のレイアウトなら、ルートレイアウトに UI を足す必要はない。
+- `nav-links.tsx` は Next.js の特殊ファイルではないので、名前は自由に付けられる。
 
 ### 第 5 章: Navigating Between Pages
 
-- `<Link>` コンポーネントでクライアントサイドのナビゲーションを行う。ページ全体を再読み込みしない。
-- ビューポートに入ったリンク先のコードは、自動でプリフェッチされる。
-- `usePathname()` で現在のパスを取得し、アクティブなリンクのスタイルを切り替える(`app/ui/dashboard/nav-links.tsx`)。`usePathname` を使うコンポーネントは Client Component にする。
+- ページ遷移には `<a>` ではなく `<Link>` を使う。
+- 本番では、画面内に入った `<Link>` の遷移先コードが自動でプリフェッチされる。
+- 現在のパスでリンクを強調する処理は、クライアント側の `usePathname` で行う。
 
 ### 第 6 章: Setting Up Your Database
 
-- PostgreSQL に接続し、`users` / `customers` / `invoices` / `revenue` の各テーブルを作成してデータを投入する。
-- 元のチュートリアルは Vercel の Postgres を使うが、このリポジトリではローカルの Docker(`docker-compose.yml`)で `postgres:17-alpine` を起動している。
-- シードは Route Handler(`app/seed/route.ts`)で行う。動作確認用のクエリ用 Route Handler が `app/query/route.ts` にある。
-- 接続情報は環境変数(`.env.local`)で管理する。
+- `.env` を `.gitignore` に入れて、DB の秘密情報を push しないようにする(公式で「重要」と明記)。
+- Vercel でのデプロイを想定したリージョンは、レイテンシを下げるため `iad1`(Washington D.C.)を推奨。
+- bcrypt が環境で動かない場合は `bcryptjs` に置き換えられる。
+- `DROP TABLE` はサンプルアプリでのみ使い、本番では実行しない。
 
 ### 第 7 章: Fetching Data
 
-- Server Component は `async/await` で直接 DB に問い合わせられる。API レイヤーは不要。
-- SQL は `postgres` ライブラリのタグ付きテンプレートで書く。パラメータは自動でエスケープされ、SQL インジェクションを防げる。
-- ダッシュボードのデータ取得関数は `app/lib/data.ts` にまとめる。
-- **リクエストウォーターフォール**: 前のリクエストの完了を待って次を実行すると、全体が遅くなる。独立したクエリは `Promise.all()` で並列に実行する(`fetchCardData`)。
+- クライアントから直接 DB に問い合わせず、サーバー側に API 層を置く。DB の秘密情報を守るため。
+- 必要なデータだけを SQL で取得する。最新 5 件なら、メモリ上で並べ替えるのではなく SQL で絞り込む。
+- 互いに依存しないデータ取得は、並列に実行してウォーターフォールを避ける(`Promise.all`)。
 
 ### 第 8 章: Static and Dynamic Rendering
 
-- **静的レンダリング**: ビルド時(または再検証時)にレンダリングし、結果をキャッシュ・配信する。高速で CDN に載せやすい。
-- **動的レンダリング**: リクエストごとにレンダリングする。ユーザー固有のデータや、リアルタイムのデータに使う。
-- `fetchRevenue` に人工的な遅延(3 秒)を入れて、1 つのデータ取得が遅いとページ全体が遅くなることを確認する。
+- 静的レンダリングは、キャッシュ配信で速く、サーバー負荷も下がり、SEO にも有利。ただし、個人化されたデータには向かない。
+- 動的レンダリングは、リアルタイムデータやユーザー固有のデータに向く。Cookie や検索パラメータなど、リクエスト時にしか分からない情報も扱える。
+- ダッシュボードは個人化されるため、動的レンダリングが適している。
 
 ### 第 9 章: Streaming
 
-- ストリーミングは、ページを小さなチャンクに分けて、準備できた順にクライアントへ送る技術。
-- ページ単位は `loading.tsx` を置く。ルートグループ `(overview)` に置くことで、請求書ページなど他のページには適用されない。
-- コンポーネント単位は `<Suspense fallback={...}>` で囲む。`CardWrapper`、`RevenueChart`、`LatestInvoices` を個別にストリーミングする(`app/dashboard/(overview)/page.tsx`)。
-- `app/ui/skeletons.tsx` のスケルトンをフォールバックに使う。
-- データ取得を、親ページからそれを使うコンポーネントの中へ移すと、必要な部分だけをストリーミングできる。
+- データ取得は、そのデータを使うコンポーネントの中へ移す。そのうえでコンポーネントを `Suspense` で囲む。
+- 複数のコンポーネントを同時に読み込みたいときも、同じパターンを使える。
+- 公式は「Suspense を試して、どれが良いか確かめるように」と勧めている。
 
 ### 第 10 章: Adding Search and Pagination
 
-- 検索クエリやページ番号は、状態ではなく **URL のクエリパラメータ** で持つ。ブックマーク・共有ができ、サーバー側でも使える。
-- `useSearchParams` / `usePathname` / `useRouter().replace` で URL を更新する(`app/ui/search.tsx`)。
-- `page.tsx` は `searchParams`(Promise)を受け取り、サーバー側でデータを絞り込む。
-- `use-debounce` の `useDebouncedCallback` で入力を 300ms デバウンスし、DB へのクエリ数を減らす。
-- 検索時はページを 1 に戻す。
-- ページネーションは総ページ数を `fetchInvoicesPages` で取得し、`app/ui/invoices/pagination.tsx` で表示する。
-- `<Suspense key={query + currentPage}>` で、検索条件が変わるたびにフォールバックを再表示する。
+- 検索語やページ番号は、クライアントの state ではなく URL の search params で管理する。URL の共有・ブックマーク、サーバーでの初期描画、分析がしやすくなる。
+- クライアントで読むなら `useSearchParams()` を使う。サーバーに戻らずに済む。
+- キー入力のように頻繁に発生するイベントは、debounce で待つ(`use-debounce`)。
+- クライアントから直接データを取らない。API 層を使わないと、DB の秘密情報が露出するため。
 
 ### 第 11 章: Mutating Data
 
-- **Server Actions**: `"use server"` を付けた非同期関数で、サーバー上でデータを更新できる(`app/lib/actions.ts`)。
-- `<form action={...}>` に渡すと、フォームデータ(`FormData`)を受け取れる。JavaScript が無効でも動作する(プログレッシブエンハンスメント)。
-- 作成・更新・削除(CRUD)の流れ:
-  1. `FormData` から値を取り出す。
-  2. Zod で検証・型変換する(`z.coerce.number()` など)。
-  3. 金額は浮動小数点の誤差を避けるため、セント単位の整数で保存する。
-  4. `INSERT` / `UPDATE` / `DELETE` を実行する。
-  5. `revalidatePath` でキャッシュを破棄し、`redirect` で一覧へ戻す。
-- 動的ルート(`/dashboard/invoices/[id]/edit`)で、`params` から id を受け取り、編集フォームを表示する。
-- `updateInvoice.bind(null, id)` で、Server Action に引数を渡す。
+- Server Actions は、専用のファイル(`actions.ts`)にまとめることを推奨。
+- フォームのデータは、Zod などで型を検証する。
+- 金額はセント単位の整数で保存する。浮動小数点の誤差を防ぐため。
+- 項目が多いフォームでは、`Object.fromEntries(formData.entries())` が便利。
+- id には連番ではなく UUID を使う方法を紹介している。URL を短くしたい場合は連番も選べる。
+- Server Action に id を渡すには、`bind` か hidden input を使う。
 
-### 第 12 章: Handling Errors
+### 第 12 章: Error Handling
 
-- Server Action 内で `try/catch` を使い、DB エラーを処理する。`redirect` は `try/catch` の外で呼ぶ(内部で例外を投げて動くため)。
-- `error.tsx`(Client Component)は、そのルート配下の想定外のエラーを捕捉し、`reset()` で再試行できる(`app/dashboard/invoices/error.tsx`)。
-- `notFound()` を呼ぶと `not-found.tsx` を表示できる。存在しない id の編集ページなどで使う。`error.tsx` より優先される。
-- 動作確認のため、`deleteInvoice` の先頭に `throw new Error(...)` が入っている(`error.tsx` の確認用)。
+- `redirect` は `try/catch` の中ではなく、後ろで呼ぶ。`redirect` は内部で例外を投げるため、`catch` に捕まらないようにするため。
+- DB のエラーは、`catch` で専用のメッセージを返す。
 
 ### 第 13 章: Improving Accessibility
 
-- `eslint-plugin-jsx-a11y`(`eslint-config-next` に含まれる)で、アクセシビリティの問題を静的に検出する。`pnpm lint` で確認する。
-- フォームのアクセシビリティ:
-  - セマンティックな HTML を使う。
-  - `<label>` と `htmlFor` で入力欄に紐づける。
-  - フォーカスのスタイルを付ける。
-- **フォームのバリデーション**:
-  - クライアント側は `required` 属性を使う。
-  - サーバー側は Zod の `safeParse` を使い、エラーを返す。
-  - `useActionState` で `state`(`errors` / `message`)を受け取り、`aria-describedby` と `aria-live="polite"` でスクリーンリーダーにエラーを伝える(`app/ui/invoices/create-form.tsx`)。
+- 入力欄には、`div` ではなくセマンティックな要素(`input`、`option` など)を使う。
+- `label` と入力欄を紐付ける。
+- エラーメッセージは `aria-live="polite"` で、スクリーンリーダーに伝える。
+- フォームのバリデーションは、ブラウザ側(`required` など)とサーバー側(Zod)の両方で行う。
+- 画像には `alt` が必要。ESLint の `jsx-a11y` が警告する。
+- さらに学ぶなら、web.dev の Learn Accessibility を推奨。
 
 ### 第 14 章: Adding Authentication
 
-- Auth.js(`next-auth@5`)で認証を実装する。パスワードは `bcrypt` でハッシュ化して保存する。
-- `auth.config.ts`: ログインページ(`/login`)と、`authorized` コールバック(`/dashboard` 配下はログイン必須、ログイン済みなら `/dashboard` へリダイレクト)を設定する。
-- `proxy.ts`(旧 middleware): `auth.config` を使い、`matcher` に合うリクエストごとに認証を確認する。認証が済むまでダッシュボードの描画を始めない。
-- `auth.ts`: `Credentials` プロバイダーで、メールアドレスとパスワードを Zod で検証し、DB からユーザーを取得して `bcrypt.compare` でパスワードを照合する。
-- `authenticate` Server Action(`app/lib/actions.ts`)で `signIn("credentials", formData)` を呼び、`AuthError` の種類に応じてエラーメッセージを返す。
-- ログインフォーム(`app/ui/login-form.tsx`)は `useActionState` でエラー表示と送信中の状態を扱う。
-- サイドナビのサインアウトボタンから `signOut` を呼び出す。
+- パスワードは、保存する前に必ずハッシュ化する。
+- Proxy(旧 middleware)の `matcher` で、認証を適用するパスを絞る。
+- 認証は複数の方法を組み合わせると安全性が上がる。2 要素認証(2FA)が例として挙げられている。
 
 ## スクリプト
 
@@ -161,5 +138,5 @@ pnpm dev
 
 ## 補足
 
-- 学習用のため、動作確認用の人工的な遅延(`app/lib/data.ts`)や、エラー確認用の `throw`(`app/lib/actions.ts` の `deleteInvoice`)が残っている。
+- 学習用のため、動作確認用の人工的な遅延(`app/lib/data.ts` の `fetchRevenue` と `fetchLatestInvoices`)や、エラー確認用の `throw`(`app/lib/actions.ts` の `deleteInvoice`)が残っている。
 - 第 15 章(Adding Metadata)は未実施。
